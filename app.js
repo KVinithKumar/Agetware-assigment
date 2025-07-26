@@ -55,7 +55,7 @@ function calculateLoan(P, N, R) {
   return { total, emi };
 }
 
-// LEND: Create a Loan
+// LEND
 app.post("/api/loans", (req, res) => {
   const { customer_id, loan_amount, duration_years, interest_rate } = req.body;
   if (!customer_id || !loan_amount || !duration_years || !interest_rate) {
@@ -167,5 +167,79 @@ app.get("/api/customers/:customer_id/overview", (req, res) => {
   });
 });
 
-// Start server
+// EXTRA UTILITY PROBLEMS
+
+// Caesar Cipher
+function caesarCipher(text, shift, mode = 'encode') {
+  let result = '';
+  shift = shift % 26;
+  if (mode === 'decode') shift = -shift;
+  for (let char of text) {
+    if (char.match(/[a-zA-Z]/)) {
+      const base = char === char.toUpperCase() ? 65 : 97;
+      result += String.fromCharCode((char.charCodeAt(0) - base + shift + 26) % 26 + base);
+    } else {
+      result += char;
+    }
+  }
+  return result;
+}
+
+// Indian Currency Format
+function indianCurrencyFormat(number) {
+  const numStr = number.toString().split(".");
+  let intPart = numStr[0];
+  let decPart = numStr.length > 1 ? "." + numStr[1] : "";
+  let lastThree = intPart.slice(-3);
+  let rest = intPart.slice(0, -3);
+  if (rest !== '') lastThree = ',' + lastThree;
+  rest = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ",");
+  return rest + lastThree + decPart;
+}
+
+// Combine Elements
+function combineLists(list1, list2) {
+  const combined = [...list1, ...list2].sort((a, b) => a.positions[0] - b.positions[0]);
+  const result = [];
+  for (let item of combined) {
+    if (!result.length) {
+      result.push(item);
+      continue;
+    }
+    const prev = result[result.length - 1];
+    const [l1, r1] = prev.positions;
+    const [l2, r2] = item.positions;
+    const overlap = Math.max(0, Math.min(r1, r2) - Math.max(l1, l2));
+    const len2 = r2 - l2;
+    if (overlap >= len2 / 2) {
+      prev.values = prev.values.concat(item.values);
+      prev.positions[1] = Math.max(r1, r2);
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+// Minimize Loss
+function minimizeLoss(prices) {
+  let minLoss = Infinity;
+  let buyYear = -1;
+  let sellYear = -1;
+  for (let i = 0; i < prices.length; i++) {
+    for (let j = i + 1; j < prices.length; j++) {
+      if (prices[j] < prices[i]) {
+        const loss = prices[i] - prices[j];
+        if (loss < minLoss) {
+          minLoss = loss;
+          buyYear = i + 1;
+          sellYear = j + 1;
+        }
+      }
+    }
+  }
+  return { buyYear, sellYear, minLoss };
+}
+
+// Start Server
 app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
