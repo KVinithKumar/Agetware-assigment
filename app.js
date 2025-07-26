@@ -1,5 +1,3 @@
-// File: app.js
-
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const { v4: uuidv4 } = require("uuid");
@@ -8,13 +6,12 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Database Setup
+//  Database Setup
 const db = new sqlite3.Database("./bank.db", (err) => {
-  if (err) return console.error("Database opening error:", err.message);
-  console.log("Connected to SQLite database");
+  if (err) return console.error("Database error:", err.message);
+  console.log("Connected to SQLite DB");
 });
 
-// Create Tables
 const createTables = () => {
   db.run(`CREATE TABLE IF NOT EXISTS Customers (
     customer_id TEXT PRIMARY KEY,
@@ -44,10 +41,9 @@ const createTables = () => {
     FOREIGN KEY(loan_id) REFERENCES Loans(loan_id)
   )`);
 };
-
 createTables();
 
-// Loan Calculation Function
+//  Loan Calculations
 function calculateLoan(P, N, R) {
   const interest = P * N * (R / 100);
   const total = P + interest;
@@ -55,19 +51,19 @@ function calculateLoan(P, N, R) {
   return { total, emi };
 }
 
-// LEND
+//  LEND API
 app.post("/api/loans", (req, res) => {
   const { customer_id, loan_amount, duration_years, interest_rate } = req.body;
   if (!customer_id || !loan_amount || !duration_years || !interest_rate) {
-    return res.status(400).json({ error: "Missing fields in request." });
+    return res.status(400).json({ error: "Missing fields" });
   }
+
   const { total, emi } = calculateLoan(loan_amount, duration_years, interest_rate);
   const loan_id = uuidv4();
-  const query = `INSERT INTO Loans (loan_id, customer_id, principal_amount, total_amount, interest_rate, loan_period_years, monthly_emi, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`;
 
   db.run(
-    query,
+    `INSERT INTO Loans (loan_id, customer_id, principal_amount, total_amount, interest_rate, loan_period_years, monthly_emi, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
     [loan_id, customer_id, loan_amount, total, interest_rate, duration_years, emi],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
@@ -76,11 +72,12 @@ app.post("/api/loans", (req, res) => {
   );
 });
 
-// PAYMENT
+//  PAYMENT API
 app.post("/api/loans/:loan_id/payments", (req, res) => {
   const { amount, payment_type } = req.body;
   const { loan_id } = req.params;
-  if (!amount || !payment_type) return res.status(400).json({ error: "Invalid payment input" });
+
+  if (!amount || !payment_type) return res.status(400).json({ error: "Invalid input" });
 
   db.get("SELECT * FROM Loans WHERE loan_id = ?", [loan_id], (err, loan) => {
     if (err || !loan) return res.status(404).json({ error: "Loan not found" });
@@ -109,9 +106,10 @@ app.post("/api/loans/:loan_id/payments", (req, res) => {
   });
 });
 
-// LEDGER
+//  LEDGER API
 app.get("/api/loans/:loan_id/ledger", (req, res) => {
   const { loan_id } = req.params;
+
   db.get("SELECT * FROM Loans WHERE loan_id = ?", [loan_id], (err, loan) => {
     if (err || !loan) return res.status(404).json({ error: "Loan not found" });
 
@@ -137,13 +135,14 @@ app.get("/api/loans/:loan_id/ledger", (req, res) => {
   });
 });
 
-// ACCOUNT OVERVIEW
+//  ACCOUNT OVERVIEW API
 app.get("/api/customers/:customer_id/overview", (req, res) => {
   const { customer_id } = req.params;
+
   db.all("SELECT * FROM Loans WHERE customer_id = ?", [customer_id], (err, loans) => {
     if (err || loans.length === 0) return res.status(404).json({ error: "No loans found" });
 
-    const loanPromises = loans.map((loan) => {
+    const overview = loans.map((loan) => {
       return new Promise((resolve) => {
         db.get(`SELECT SUM(amount) AS paid FROM Payments WHERE loan_id = ?`, [loan.loan_id], (err, row) => {
           const paid = row?.paid || 0;
@@ -161,15 +160,18 @@ app.get("/api/customers/:customer_id/overview", (req, res) => {
       });
     });
 
-    Promise.all(loanPromises).then((overview) => {
-      res.json({ customer_id, total_loans: overview.length, loans: overview });
+    Promise.all(overview).then((loansData) => {
+      res.json({ customer_id, total_loans: loansData.length, loans: loansData });
     });
   });
 });
 
-// EXTRA UTILITY PROBLEMS
 
-// Caesar Cipher
+// ===========================
+//  UTILITY FUNCTION ROUTES
+// ===========================
+
+//  Caesar Cipher
 function caesarCipher(text, shift, mode = 'encode') {
   let result = '';
   shift = shift % 26;
@@ -185,6 +187,13 @@ function caesarCipher(text, shift, mode = 'encode') {
   return result;
 }
 
+app.post("/api/caesar", (req, res) => {
+  const { message, shift, mode } = req.body;
+  if (!message || typeof shift !== "number") return res.status(400).json({ error: "Invalid input" });
+  const result = caesarCipher(message, shift, mode || "encode");
+  res.json({ result });
+});
+
 // Indian Currency Format
 function indianCurrencyFormat(number) {
   const numStr = number.toString().split(".");
@@ -197,7 +206,14 @@ function indianCurrencyFormat(number) {
   return rest + lastThree + decPart;
 }
 
-// Combine Elements
+app.post("/api/indian-format", (req, res) => {
+  const { number } = req.body;
+  if (typeof number !== "number") return res.status(400).json({ error: "Invalid number" });
+  const formatted = indianCurrencyFormat(number);
+  res.json({ formatted });
+});
+
+//Combine Lists
 function combineLists(list1, list2) {
   const combined = [...list1, ...list2].sort((a, b) => a.positions[0] - b.positions[0]);
   const result = [];
@@ -221,6 +237,13 @@ function combineLists(list1, list2) {
   return result;
 }
 
+app.post("/api/combine-lists", (req, res) => {
+  const { list1, list2 } = req.body;
+  if (!Array.isArray(list1) || !Array.isArray(list2)) return res.status(400).json({ error: "Invalid lists" });
+  const combined = combineLists(list1, list2);
+  res.json({ combined });
+});
+
 // Minimize Loss
 function minimizeLoss(prices) {
   let minLoss = Infinity;
@@ -241,5 +264,12 @@ function minimizeLoss(prices) {
   return { buyYear, sellYear, minLoss };
 }
 
-// Start Server
+app.post("/api/minimize-loss", (req, res) => {
+  const { prices } = req.body;
+  if (!Array.isArray(prices)) return res.status(400).json({ error: "Invalid prices" });
+  const result = minimizeLoss(prices);
+  res.json(result);
+});
+
+//  Start Server
 app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
